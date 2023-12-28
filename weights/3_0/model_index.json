@@ -1,0 +1,25 @@
+{
+  "_class_name": "Kandinsky3Pipeline",
+  "_diffusers_version": "0.24.0.dev0",
+  "_name_or_path": "/home/patrick/kandinsky-3",
+  "movq": [
+    "diffusers",
+    "VQModel"
+  ],
+  "scheduler": [
+    "diffusers",
+    "DDPMScheduler"
+  ],
+  "text_encoder": [
+    "transformers",
+    "T5EncoderModel"
+  ],
+  "tokenizer": [
+    "transformers",
+    "T5Tokenizer"
+  ],
+  "unet": [
+    "diffusers",
+    "Kandinsky3UNet"
+  ]
+}

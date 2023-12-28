@@ -1,0 +1,17 @@
+{
+  "_class_name": "Kandinsky3UNet",
+  "_diffusers_version": "0.24.0.dev0",
+  "attention_head_dim": 64,
+  "block_out_channels": [
+    384,
+    768,
+    1536,
+    3072
+  ],
+  "cross_attention_dim": 4096,
+  "encoder_hid_dim": 4096,
+  "groups": 32,
+  "in_channels": 4,
+  "layers_per_block": 3,
+  "time_embedding_dim": 1536
+}
