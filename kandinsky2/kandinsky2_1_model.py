@@ -122,7 +122,7 @@ class Kandinsky2_1:
         return self.clip_model.encode_image(image).to(self.model_dtype)
 
     @torch.no_grad()
-    def generate_img(self, prompt, img_prompt, batch_size = 1, diffusion = None, guidance_scale = 7, init_step = None, noise = None, init_img = None, img_mask = None, h = 768, w = 768, sampler = "ddim_sampler", ddim_eta = 0.05, num_steps = 50, progress = True):
+    def generate_img(self, prompt, img_prompt, batch_size = 1, diffusion = None, guidance_scale = 7, init_step = None, noise = None, init_img = None, img_mask = None, h = 768, w = 768, sampler = "ddim", ddim_eta = 0.05, num_steps = 50, progress = True):
         new_h, new_w = self.get_new_h_w(h, w)
         full_batch_size = batch_size * 2
         model_kwargs = {}
@@ -146,7 +146,7 @@ class Kandinsky2_1:
             cond_eps, uncond_eps = torch.split(eps, len(eps) // 2, dim = 0)
             half_eps = uncond_eps + guidance_scale * (cond_eps - uncond_eps)
             eps = torch.cat([half_eps, half_eps], dim = 0)
-            if sampler == "p_sampler":
+            if sampler == "dpm":
                 return torch.cat([eps, rest], dim = 1)
             else:
                 return eps
@@ -160,22 +160,19 @@ class Kandinsky2_1:
         else:
             def denoised_fun(x):
                 return x.clamp(-2, 2)
-        if sampler == "p_sampler":
+        if sampler == "dpm":
             self.model.del_cache()
             samples = diffusion.p_sample_loop(model_fn, (full_batch_size, 4, new_h, new_w), device = self.device, noise = noise, progress = progress, model_kwargs = model_kwargs, init_step = init_step, denoised_fn = denoised_fun)[:batch_size]
             self.model.del_cache()
         else:
-            if sampler == "ddim_sampler":
+            if sampler == "ddim":
                 sampler = DDIMSampler(model = model_fn, old_diffusion = diffusion, schedule = "linear")
-            elif sampler == "plms_sampler":
+            elif sampler == "plms":
                 sampler = PLMSSampler(model = model_fn, old_diffusion = diffusion, schedule = "linear")
             else:
-                raise ValueError("Only ddim_sampler and plms_sampler is available") 
+                raise ValueError("Only ddim, plms and dpm samplers is available") 
             self.model.del_cache()
-            if sampler == "ddim_sampler":
-                samples, _ = sampler.sample(num_steps, batch_size * 2, (4, new_h, new_w), conditioning = model_kwargs, x_T = noise, init_step = init_step, eta = ddim_eta)
-            else:
-                samples, _ = sampler.sample(num_steps, batch_size * 2, (4, new_h, new_w), conditioning = model_kwargs, x_T = noise, init_step = init_step)
+            samples, _ = sampler.sample(num_steps, batch_size * 2, (4, new_h, new_w), conditioning = model_kwargs, x_T = noise, init_step = init_step, eta = ddim_eta)
             self.model.del_cache()
             samples = samples[:batch_size]
         if self.use_image_enc:
@@ -191,7 +188,7 @@ class Kandinsky2_1:
         return self.encode_images(img, is_pil = False).repeat(batch_size, 1)
 
     @torch.no_grad()
-    def generate_text2img(self, prompt, num_steps = 100, batch_size = 1, guidance_scale = 7, h = 768, w = 768, sampler = "ddim_sampler", ddim_eta = 0.05, prior_cf_scale = 4, prior_steps = "25", negative_prior_prompt = "", negative_decoder_prompt = "", seed = 42, progress = True):
+    def generate_text2img(self, prompt, num_steps = 100, batch_size = 1, guidance_scale = 7, h = 768, w = 768, sampler = "ddim", ddim_eta = 0.05, prior_cf_scale = 4, prior_steps = "25", negative_prior_prompt = "", negative_decoder_prompt = "", seed = 42, progress = True):
         seed_everything(seed)
         image_emb = self.generate_clip_emb(prompt, batch_size = batch_size, prior_cf_scale = prior_cf_scale, prior_steps = prior_steps, negative_prior_prompt = negative_prior_prompt)
         if negative_decoder_prompt == "":
@@ -201,13 +198,13 @@ class Kandinsky2_1:
         image_emb = torch.cat([image_emb, zero_image_emb], dim = 0).to(self.device)
         # load diffusion
         config = deepcopy(self.config)
-        if sampler == "p_sampler":
+        if sampler == "dpm":
             config["diffusion_config"]["timestep_respacing"] = str(num_steps)
         diffusion = create_gaussian_diffusion(**config["diffusion_config"])
         return self.generate_img(prompt = prompt, img_prompt = image_emb, batch_size = batch_size, guidance_scale = guidance_scale, h = h, w = w, sampler = sampler, ddim_eta = ddim_eta, num_steps = num_steps, diffusion = diffusion, progress = progress)
 
     @torch.no_grad()
-    def mix_images(self, image1_binary_data, image2_binary_data, prompt_image1, prompt_image2, weights, num_steps = 100, batch_size = 1, guidance_scale = 7, h = 768, w = 768, custom_orig_size = True, sampler = "ddim_sampler", ddim_eta = 0.05, prior_cf_scale = 4, prior_steps = "25", negative_prior_prompt = "", negative_decoder_prompt = "", seed = 42, progress = True):
+    def mix_images(self, image1_binary_data, image2_binary_data, prompt_image1, prompt_image2, weights, num_steps = 100, batch_size = 1, guidance_scale = 7, h = 768, w = 768, custom_orig_size = True, sampler = "ddim", ddim_eta = 0.05, prior_cf_scale = 4, prior_steps = "25", negative_prior_prompt = "", negative_decoder_prompt = "", seed = 42, progress = True):
         seed_everything(seed)
         img1 = Image.open(io.BytesIO(image1_binary_data)).convert("RGB")
         img2 = Image.open(io.BytesIO(image2_binary_data)).convert("RGB")
@@ -249,13 +246,13 @@ class Kandinsky2_1:
         image_emb = torch.cat([image_emb, zero_image_emb], dim = 0).to(self.device)
         # load diffusion
         config = deepcopy(self.config)
-        if sampler == "p_sampler":
+        if sampler == "dpm":
             config["diffusion_config"]["timestep_respacing"] = str(num_steps)
         diffusion = create_gaussian_diffusion(**config["diffusion_config"])
         return self.generate_img(prompt = "", img_prompt = image_emb, batch_size = batch_size, guidance_scale = guidance_scale, h = h, w = w, sampler = sampler, ddim_eta = ddim_eta, num_steps = num_steps, diffusion = diffusion, progress = progress)
 
     @torch.no_grad()
-    def generate_img2img(self, prompt, binary_data, strength = 0.7, num_steps = 100, batch_size = 1, guidance_scale = 7, h = 768, w = 768, sampler = "ddim_sampler", ddim_eta = 0.05, prior_cf_scale = 4, prior_steps = "25", negative_prior_prompt = "", negative_decoder_prompt = "", seed = 42, custom_orig_size = False, progress = True):
+    def generate_img2img(self, prompt, binary_data, strength = 0.7, num_steps = 100, batch_size = 1, guidance_scale = 7, h = 768, w = 768, sampler = "ddim", ddim_eta = 0.05, prior_cf_scale = 4, prior_steps = "25", negative_prior_prompt = "", negative_decoder_prompt = "", seed = 42, custom_orig_size = False, progress = True):
         seed_everything(seed)
         image_emb = self.generate_clip_emb(prompt, batch_size = batch_size, prior_cf_scale = prior_cf_scale, prior_steps = prior_steps, negative_prior_prompt = negative_prior_prompt)
         if negative_decoder_prompt == "":
@@ -265,7 +262,7 @@ class Kandinsky2_1:
         image_emb = torch.cat([image_emb, zero_image_emb], dim = 0).to(self.device)
         # load diffusion
         config = deepcopy(self.config)
-        if sampler == "p_sampler":
+        if sampler == "dpm":
             config["diffusion_config"]["timestep_respacing"] = str(num_steps)
         diffusion = create_gaussian_diffusion(**config["diffusion_config"])
         pil_img = Image.open(io.BytesIO(binary_data)).convert("RGB")
@@ -289,7 +286,7 @@ class Kandinsky2_1:
         return self.generate_img(prompt = prompt, img_prompt = image_emb, batch_size = batch_size, guidance_scale = guidance_scale, h = h, w = w, sampler = sampler, ddim_eta = ddim_eta, num_steps = num_steps, diffusion = diffusion, noise = image, init_step = start_step, progress = progress)
 
     @torch.no_grad()
-    def generate_inpainting(self, prompt, binary_data, mask_binary_data, num_steps = 100, batch_size = 1, guidance_scale = 7, sampler = "ddim_sampler", ddim_eta = 0.05, prior_cf_scale = 4, prior_steps = "25", negative_prior_prompt = "", negative_decoder_prompt = "", seed = 42, progress = True):
+    def generate_inpainting(self, prompt, binary_data, mask_binary_data, num_steps = 100, batch_size = 1, guidance_scale = 7, sampler = "ddim", ddim_eta = 0.05, prior_cf_scale = 4, prior_steps = "25", negative_prior_prompt = "", negative_decoder_prompt = "", seed = 42, progress = True):
         seed_everything(seed)
         image_emb = self.generate_clip_emb(prompt, batch_size = batch_size, prior_cf_scale = prior_cf_scale, prior_steps = prior_steps, negative_prior_prompt = negative_prior_prompt)
         if negative_decoder_prompt == "":
@@ -299,7 +296,7 @@ class Kandinsky2_1:
         image_emb = torch.cat([image_emb, zero_image_emb], dim = 0).to(self.device)
         # load diffusion
         config = deepcopy(self.config)
-        if sampler == "p_sampler":
+        if sampler == "dpm":
             config["diffusion_config"]["timestep_respacing"] = str(num_steps)
         diffusion = create_gaussian_diffusion(**config["diffusion_config"])
         pil_img = Image.open(io.BytesIO(binary_data)).convert("RGB")

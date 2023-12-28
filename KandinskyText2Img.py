@@ -12,12 +12,13 @@ from kandinsky3 import Kandinsky3Pipeline
 
 ckpt_dir = "weights"
 
-def get_kandinsky2_0(device, task_type = "text2img", use_auth_token = None):
+def get_kandinsky2_0(device, task_type = "text2img", use_auth_token = None, use_flash_attention = False):
     cache_dir = os.path.join(ckpt_dir, "2_0")
     config = deepcopy(CONFIG_2_0)
+    config["model_config"]["use_flash_attention"] = use_flash_attention
     if task_type == "inpainting":
         model_name = "Kandinsky-2-0-inpainting.pt"
-        config_file_url = hf_hub_url(repo_id="sberbank-ai/Kandinsky_2.0", filename=model_name)
+        config_file_url = hf_hub_url(repo_id = "sberbank-ai/Kandinsky_2.0", filename = model_name)
     elif task_type == "text2img" or task_type == "img2img":
         model_name = "Kandinsky-2-0.pt"
         config_file_url = hf_hub_url(repo_id = "sberbank-ai/Kandinsky_2.0", filename = model_name)
@@ -43,7 +44,7 @@ def get_kandinsky2_0(device, task_type = "text2img", use_auth_token = None):
     model = Kandinsky2(config, unet_path, device, task_type)
     return model
 
-def get_kandinsky2_1(device, task_type = "text2img", use_auth_token=None, use_flash_attention=False):
+def get_kandinsky2_1(device, task_type = "text2img", use_auth_token = None, use_flash_attention = False):
     cache_dir = os.path.join(ckpt_dir, "2_1")
     config = DictConfig(deepcopy(CONFIG_2_1))
     config["model_config"]["use_flash_attention"] = use_flash_attention
@@ -71,16 +72,17 @@ def get_kandinsky2_1(device, task_type = "text2img", use_auth_token=None, use_fl
     config["image_enc_params"]["ckpt_path"] = os.path.join(cache_dir, "movq_final.ckpt")
     cache_model_name = os.path.join(cache_dir, model_name)
     cache_prior_name = os.path.join(cache_dir, prior_name)
-    model = Kandinsky2_1(config, cache_model_name, cache_prior_name, device, task_type=task_type)
+    model = Kandinsky2_1(config, cache_model_name, cache_prior_name, device, task_type = task_type)
     return model
 
-def get_kandinsky2(device, task_type = "text2img", use_auth_token = None, model_version = "2.2", use_flash_attention = False):
+def get_kandinsky2(device, task_type = "text2img", use_auth_token = None, model_version = "2.2", use_flash_attention = False, torch_dtype = torch.float16):
     if model_version == "2.0":
-        model = get_kandinsky2_0(device, task_type = task_type, use_auth_token = use_auth_token)
+        model = get_kandinsky2_0(device, task_type = task_type, use_auth_token = use_auth_token, use_flash_attention = use_flash_attention)
     elif model_version == "2.1":
         model = get_kandinsky2_1(device, task_type = task_type, use_auth_token = use_auth_token, use_flash_attention = use_flash_attention)
     elif model_version == "2.2":
-        model = Kandinsky2_2(device = device, task_type = task_type)
+        cache_dir = os.path.join(ckpt_dir, "2_2")
+        model = Kandinsky2_2(device = device, task_type = task_type, cache_dir = cache_dir, torch_dtype = torch_dtype)
     else:
         raise ValueError("Доступны только 2.0, 2.1 и 2.2")
     return model
@@ -109,11 +111,15 @@ def Kandinsky_text_to_image(prompt, opt):
         model = get_kandinsky2(device = device, task_type = "text2img", model_version = "2.1", use_flash_attention = opt["use_flash_attention"])
         binary_data_list = model.generate_text2img(prompt, num_steps = opt["steps"], batch_size = opt["num_samples"], guidance_scale = opt["scale"], h = height, w = width, sampler = opt["sampler"], ddim_eta = opt["eta"], prior_cf_scale = opt["prior_scale"], prior_steps = str(opt["prior_steps"]), negative_prior_prompt = opt["negative_prior_prompt"], negative_decoder_prompt = opt["negative_prompt"], seed = opt["seed"], progress = opt["progress"])
     elif opt["version"] == "Kandinsky2.2":
+        if opt["precision"] == True:
+            torch_dtype = torch.float32
+        else:
+            torch_dtype = torch.float16
         if opt["ControlNET"] == True:
-            model = get_kandinsky2(device, task_type = "text2imgCN", model_version = "2.2")
+            model = get_kandinsky2(device, task_type = "text2imgCN", model_version = "2.2", torch_dtype = torch_dtype)
             binary_data_list = model.generate_text2imgCN(prompt, decoder_steps = opt["steps"], batch_size = opt["num_samples"], prior_steps = opt["prior_steps"], prior_guidance_scale = opt["prior_scale"], decoder_guidance_scale = opt["scale"], h = height, w = width, negative_prior_prompt = opt["negative_prior_prompt"], negative_decoder_prompt = opt["negative_prompt"], seed = opt["seed"])
         else:
-            model = get_kandinsky2(device, task_type = "text2img", model_version = "2.2")
+            model = get_kandinsky2(device, task_type = "text2img", model_version = "2.2", torch_dtype = torch_dtype)
             binary_data_list = model.generate_text2img(prompt, decoder_steps = opt["steps"], batch_size = opt["num_samples"], prior_steps = opt["prior_steps"], prior_guidance_scale = opt["prior_scale"], decoder_guidance_scale = opt["scale"], h = height, w = width, negative_prior_prompt = opt["negative_prior_prompt"], negative_decoder_prompt = opt["negative_prompt"], seed = opt["seed"])
     elif opt["version"] == "Kandinsky3.0":
         if opt["precision"] == True:
@@ -141,16 +147,16 @@ if __name__ == "__main__":
         "use_custom_res": False,                #Использовать собственное разрешение изображения для каждой модели, вместо рекомендованного
         "w": 512,                               #512 для Kandinsky 2.0, 768 для Kandinsky 2.1 и 1024 для Kandinsky 2.2-3.0 (только для "use_custom_res": True)
         "h": 512,                               #512 для Kandinsky 2.0, 768 для Kandinsky 2.1 и 1024 для Kandinsky 2.2-3.0 (только для "use_custom_res": True)
-        "sampler": "ddim_sampler",              #("ddim_sampler", "plms_sampler", "p_sampler") Только для Kandinsky < 2.2
+        "sampler": "ddim",                      #Выбор обработчика ("ddim", "plms", "dpm") Только для Kandinsky < 2.2
         "num_samples": 1,                       #Количество возвращаемых изображений (от 1 до 10, но, думаю, можно и больше при желании)
-        "eta": 0.05,                            #только для обработчика "ddim_sampler" и Kandinsky < 2.2
+        "eta": 0.05,                            #Для всех версий, кроме Kandinsky 2.2
+        "prior_scale": 4.0,                     #Только для 2.0 < Kandinsky < 3.0
         "scale": 3.0,                           #От 0.1 до 30.0
-        "prior_scale": 4,                       #Только для 2.0 < Kandinsky < 3.0
         "denoised_type": "dynamic_threshold",   #("dynamic_threshold", "clip_denoised") только для "Kandinsky2.0"
         "dynamic_threshold_v": 99.5,            #Только для "Kandinsky2.0" и "dynamic_threshold"
-        "use_flash_attention": False,           #Только для "Kandinsky" < 3.0
-        "precision": False,                     #Использовать полную точность (32) или половинную (16)? При использовании половинной генерация в 4 раза быстрее и требуется в 4 раза меньше видеопамяти. Это системный параметр, полная точность слишком уж тяжёлая при высоких разрешениях. Используется только для Kandinsky3.0
-        "progress": True,                       #Только для Kandinsky < 2.2 и обработчика "p_sampler"
+        "use_flash_attention": False,           #Только для "Kandinsky" < 3.0 (он системный. У меня проблемы со сборкой пакета flash_attn, если получится его сбилдить, то можкно будет включать этот параметр)
+        "precision": False,                     #Использовать полную точность (32) или половинную (16)? При использовании половинной генерация в 4 раза быстрее и требуется в 4 раза меньше видеопамяти. Это системный параметр, полная точность слишком уж тяжёлая при высоких разрешениях. Используется только для Kandinsky > 2.1
+        "progress": True,                       #Только для Kandinsky < 2.2 и обработчика "dpm"
         "low_vram_mode": False,                 #Режим для работы на малом количестве видеопамяти. Системный параметр
         "max_dim": 1048576                      #На даный момент я не могу генерировать изображения больше 1024 на 1024. Системный параметр
     }
@@ -158,7 +164,7 @@ if __name__ == "__main__":
     prompt = "A robot, 4k photo"
     params["negative_prompt"] = "lowres, text, error, cropped, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, out of frame, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck, username, watermark, signature"
     images = Kandinsky_text_to_image(prompt, params)
-    iii = 0
+    iii = 3
     for image in images:
         iii += 1
         with open("img_" + str(iii) + ".png", "wb") as f:
