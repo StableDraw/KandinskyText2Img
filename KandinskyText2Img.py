@@ -116,7 +116,11 @@ def Kandinsky_text_to_image(prompt, opt):
             model = get_kandinsky2(device, task_type = "text2img", model_version = "2.2")
             binary_data_list = model.generate_text2img(prompt, decoder_steps = opt["steps"], batch_size = opt["num_samples"], prior_steps = opt["prior_steps"], prior_guidance_scale = opt["prior_scale"], decoder_guidance_scale = opt["scale"], h = height, w = width, negative_prior_prompt = opt["negative_prior_prompt"], negative_decoder_prompt = opt["negative_prompt"], seed = opt["seed"])
     elif opt["version"] == "Kandinsky3.0":
-        model = Kandinsky3Pipeline.from_pretrained("weights\\3_0", variant = "fp16", torch_dtype = torch.float16, cache_dir = "weights\\3_0", device_map = None, low_cpu_mem_usage = False)
+        if opt["precision"] == True:
+            torch_dtype = torch.float32
+        else:
+            torch_dtype = torch.float16
+        model = Kandinsky3Pipeline.from_pretrained("weights\\3_0", variant = "fp16", torch_dtype = torch_dtype, cache_dir = "weights\\3_0", device_map = None, low_cpu_mem_usage = False)
         model.enable_model_cpu_offload()
         generator = torch.Generator(device = "cpu").manual_seed(opt["seed"])
         binary_data_list = model.generate_text2img(prompt = prompt, num_inference_steps = opt["steps"], guidance_scale = opt["scale"], negative_prompt = opt["negative_prompt"], num_images_per_prompt = opt["num_samples"], height = height, width = width, generator = generator, prompt_embeds = None, negative_prompt_embeds = None, output_type = "bd", return_dict = True, callback = None, callback_steps = 1, latents = None, device = device).images
@@ -145,6 +149,7 @@ if __name__ == "__main__":
         "denoised_type": "dynamic_threshold",   #("dynamic_threshold", "clip_denoised") только для "Kandinsky2.0"
         "dynamic_threshold_v": 99.5,            #Только для "Kandinsky2.0" и "dynamic_threshold"
         "use_flash_attention": False,           #Только для "Kandinsky" < 3.0
+        "precision": False,                     #Использовать полную точность (32) или половинную (16)? При использовании половинной генерация в 4 раза быстрее и требуется в 4 раза меньше видеопамяти. Это системный параметр, полная точность слишком уж тяжёлая при высоких разрешениях. Используется только для Kandinsky3.0
         "progress": True,                       #Только для Kandinsky < 2.2 и обработчика "p_sampler"
         "low_vram_mode": False,                 #Режим для работы на малом количестве видеопамяти. Системный параметр
         "max_dim": 1048576                      #На даный момент я не могу генерировать изображения больше 1024 на 1024. Системный параметр
