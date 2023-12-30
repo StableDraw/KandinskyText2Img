@@ -1,0 +1,3 @@
+[submodule "kandinsky"]
+	path = kandinsky
+	url = https://github.com/Robolightning/kandinsky
