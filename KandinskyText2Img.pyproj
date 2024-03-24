@@ -11,6 +11,7 @@
     <OutputPath>.</OutputPath>
     <Name>KandinskyText2Img</Name>
     <RootNamespace>KandinskyText2Img</RootNamespace>
+    <SuppressEnvironmentCreationPrompt>True</SuppressEnvironmentCreationPrompt>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <DebugSymbols>true</DebugSymbols>

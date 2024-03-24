@@ -4,11 +4,11 @@ from huggingface_hub import hf_hub_url, cached_download
 from copy import deepcopy
 from omegaconf.dictconfig import DictConfig
 
-from kandinsky2.configs import CONFIG_2_0, CONFIG_2_1
-from kandinsky2.kandinsky2_model import Kandinsky2
-from kandinsky2.kandinsky2_1_model import Kandinsky2_1
-from kandinsky2.kandinsky2_2_model import Kandinsky2_2
-from kandinsky3 import Kandinsky3Pipeline
+from kandinsky.configs import CONFIG_2_0, CONFIG_2_1
+from kandinsky.kandinsky2_model import Kandinsky2
+from kandinsky.kandinsky2_1_model import Kandinsky2_1
+from kandinsky.kandinsky2_2_model import Kandinsky2_2
+from kandinsky.kandinsky3_pipeline import Kandinsky3Pipeline
 
 ckpt_dir = "weights"
 
