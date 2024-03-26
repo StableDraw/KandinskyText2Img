@@ -1,9 +1,10 @@
 import os
 import torch
-from huggingface_hub import hf_hub_url, cached_download
+from os.path import isfile, exists, join
+from huggingface_hub import hf_hub_url, hf_hub_download, snapshot_download
 from copy import deepcopy
 from omegaconf.dictconfig import DictConfig
-
+from tqdm import tqdm
 from kandinsky.configs import CONFIG_2_0, CONFIG_2_1
 from kandinsky.kandinsky2_model import Kandinsky2
 from kandinsky.kandinsky2_1_model import Kandinsky2_1
@@ -12,79 +13,130 @@ from kandinsky.kandinsky3_pipeline import Kandinsky3Pipeline
 
 ckpt_dir = "weights"
 
-def get_kandinsky2_0(device, task_type = "text2img", use_auth_token = None, use_flash_attention = False):
-    cache_dir = os.path.join(ckpt_dir, "2_0")
+def get_kandinsky2_0(device, task_type = "text2img", use_flash_attention = False):
+    repo_id = "sberbank-ai/Kandinsky_2.0"
+    cache_dir = join(ckpt_dir, "2_0")
     config = deepcopy(CONFIG_2_0)
     config["model_config"]["use_flash_attention"] = use_flash_attention
     if task_type == "inpainting":
         model_name = "Kandinsky-2-0-inpainting.pt"
-        config_file_url = hf_hub_url(repo_id = "sberbank-ai/Kandinsky_2.0", filename = model_name)
+        config_file_url = hf_hub_url(repo_id = repo_id, filename = model_name)
     elif task_type == "text2img" or task_type == "img2img":
         model_name = "Kandinsky-2-0.pt"
-        config_file_url = hf_hub_url(repo_id = "sberbank-ai/Kandinsky_2.0", filename = model_name)
+        config_file_url = hf_hub_url(repo_id = repo_id, filename = model_name)
     else:
         raise ValueError("Доступны только text2img, img2img и inpainting")
-    cached_download(config_file_url, cache_dir = cache_dir, force_filename = model_name, use_auth_token = use_auth_token)
-    cache_dir_text_en1 = os.path.join(cache_dir, "text_encoder1")
+    filename = config_file_url[config_file_url.find(repo_id) + len(repo_id) + 14:]
+    if not isfile(cache_dir + "\\" + filename):
+        hf_hub_download(repo_id = repo_id, local_dir = cache_dir, filename = filename, local_dir_use_symlinks = False)
+    cache_dir_text_en1 = join(cache_dir, "text_encoder1")
     for name in ["config.json", "pytorch_model.bin", "sentencepiece.bpe.model", "special_tokens_map.json", "tokenizer.json", "tokenizer_config.json"]:
-        config_file_url = hf_hub_url(repo_id = "sberbank-ai/Kandinsky_2.0", filename = f"text_encoder1/{name}")
-        cached_download(config_file_url, cache_dir = cache_dir_text_en1, force_filename = name, use_auth_token = use_auth_token)
-    cache_dir_text_en2 = os.path.join(cache_dir, "text_encoder2")
+        config_file_url = hf_hub_url(repo_id = repo_id, filename = f"text_encoder1/{name}")
+        filename = config_file_url[config_file_url.find(repo_id) + len(repo_id) + 14:]
+        if not isfile(cache_dir + "\\" + filename):
+            hf_hub_download(repo_id = repo_id, local_dir = cache_dir, filename = filename, local_dir_use_symlinks = False)
+    cache_dir_text_en2 = join(cache_dir, "text_encoder2")
     for name in ["config.json", "pytorch_model.bin", "spiece.model", "special_tokens_map.json", "tokenizer_config.json"]:
-        config_file_url = hf_hub_url(repo_id = "sberbank-ai/Kandinsky_2.0", filename = f"text_encoder2/{name}")
-        cached_download(config_file_url, cache_dir = cache_dir_text_en2, force_filename = name, use_auth_token = use_auth_token)
-    config_file_url = hf_hub_url(repo_id = "sberbank-ai/Kandinsky_2.0", filename = "vae.ckpt")
-    cached_download(config_file_url, cache_dir = cache_dir, force_filename = "vae.ckpt", use_auth_token = use_auth_token)
+        config_file_url = hf_hub_url(repo_id = repo_id, filename = f"text_encoder2/{name}")
+        filename = config_file_url[config_file_url.find(repo_id) + len(repo_id) + 14:]
+        if not isfile(cache_dir + "\\" + filename):
+            hf_hub_download(repo_id = repo_id, local_dir = cache_dir, filename = filename, local_dir_use_symlinks = False)
+    config_file_url = hf_hub_url(repo_id = repo_id, filename = "vae.ckpt")
+    filename = config_file_url[config_file_url.find(repo_id) + len(repo_id) + 14:]
+    if not isfile(cache_dir + "\\" + filename):
+        hf_hub_download(repo_id = repo_id, local_dir = cache_dir, filename = filename, local_dir_use_symlinks = False)
     config["text_enc_params1"]["model_path"] = cache_dir_text_en1
     config["text_enc_params2"]["model_path"] = cache_dir_text_en2
     config["tokenizer_name1"] = cache_dir_text_en1
     config["tokenizer_name2"] = cache_dir_text_en2
-    config["image_enc_params"]["params"]["ckpt_path"] = os.path.join(cache_dir, "vae.ckpt")
-    unet_path = os.path.join(cache_dir, model_name)
+    config["image_enc_params"]["params"]["ckpt_path"] = join(cache_dir, "vae.ckpt")
+    unet_path = join(cache_dir, model_name)
     model = Kandinsky2(config, unet_path, device, task_type)
     return model
 
-def get_kandinsky2_1(device, task_type = "text2img", use_auth_token = None, use_flash_attention = False):
-    cache_dir = os.path.join(ckpt_dir, "2_1")
+def get_kandinsky2_1(device, task_type = "text2img", use_flash_attention = False):
+    repo_id = "sberbank-ai/Kandinsky_2.1"
+    cache_dir = join(ckpt_dir, "2_1")
     config = DictConfig(deepcopy(CONFIG_2_1))
     config["model_config"]["use_flash_attention"] = use_flash_attention
     if task_type == "text2img" or task_type == "img2img":
         model_name = "decoder_fp16.ckpt"
-        config_file_url = hf_hub_url(repo_id = "sberbank-ai/Kandinsky_2.1", filename = model_name)
+        config_file_url = hf_hub_url(repo_id = repo_id, filename = model_name)
     elif task_type == "inpainting":
         model_name = "inpainting_fp16.ckpt"
-        config_file_url = hf_hub_url(repo_id = "sberbank-ai/Kandinsky_2.1", filename = model_name)
-    cached_download(config_file_url, cache_dir = cache_dir, force_filename = model_name, use_auth_token = use_auth_token)
+        config_file_url = hf_hub_url(repo_id = repo_id, filename = model_name)
+    filename = config_file_url[config_file_url.find(repo_id) + len(repo_id) + 14:]
+    if not isfile(cache_dir + "\\" + filename):
+        hf_hub_download(repo_id = repo_id, local_dir = cache_dir, filename = filename, local_dir_use_symlinks = False)
     prior_name = "prior_fp16.ckpt"
-    config_file_url = hf_hub_url(repo_id = "sberbank-ai/Kandinsky_2.1", filename = prior_name)
-    cached_download(config_file_url, cache_dir = cache_dir, force_filename = prior_name, use_auth_token = use_auth_token)
-    cache_dir_text_en = os.path.join(cache_dir, "text_encoder")
+    config_file_url = hf_hub_url(repo_id = repo_id, filename = prior_name)
+    filename = config_file_url[config_file_url.find(repo_id) + len(repo_id) + 14:]
+    if not isfile(cache_dir + "\\" + filename):
+        hf_hub_download(repo_id = repo_id, local_dir = cache_dir, filename = filename, local_dir_use_symlinks = False)
+    cache_dir_text_en = join(cache_dir, "text_encoder")
     for name in ["config.json", "pytorch_model.bin", "sentencepiece.bpe.model", "special_tokens_map.json", "tokenizer.json", "tokenizer_config.json"]:
-        config_file_url = hf_hub_url(repo_id = "sberbank-ai/Kandinsky_2.1", filename = f"text_encoder/{name}")
-        cached_download(config_file_url, cache_dir = cache_dir_text_en, force_filename = name, use_auth_token = use_auth_token)
-    config_file_url = hf_hub_url(repo_id = "sberbank-ai/Kandinsky_2.1", filename = "movq_final.ckpt")
-    cached_download(config_file_url, cache_dir=cache_dir, force_filename = "movq_final.ckpt", use_auth_token = use_auth_token)
-    config_file_url = hf_hub_url(repo_id = "sberbank-ai/Kandinsky_2.1", filename = "ViT-L-14_stats.th")
-    cached_download(config_file_url, cache_dir = cache_dir, force_filename = "ViT-L-14_stats.th", use_auth_token = use_auth_token)
+        config_file_url = hf_hub_url(repo_id = repo_id, filename = f"text_encoder/{name}")
+        filename = config_file_url[config_file_url.find(repo_id) + len(repo_id) + 14:]
+        if not isfile(cache_dir + "\\" + filename):
+            hf_hub_download(repo_id = repo_id, local_dir = cache_dir, filename = filename, local_dir_use_symlinks = False)
+    config_file_url = hf_hub_url(repo_id = repo_id, filename = "movq_final.ckpt")
+    filename = config_file_url[config_file_url.find(repo_id) + len(repo_id) + 14:]
+    if not isfile(cache_dir + "\\" + filename):
+        hf_hub_download(repo_id = repo_id, local_dir = cache_dir, filename = filename, local_dir_use_symlinks = False)
+    config_file_url = hf_hub_url(repo_id = repo_id, filename = "ViT-L-14_stats.th")
+    filename = config_file_url[config_file_url.find(repo_id) + len(repo_id) + 14:]
+    if not isfile(cache_dir + "\\" + filename):
+        hf_hub_download(repo_id = repo_id, local_dir = cache_dir, filename = filename, local_dir_use_symlinks = False)
     config["tokenizer_name"] = cache_dir_text_en
     config["text_enc_params"]["model_path"] = cache_dir_text_en
-    config["prior"]["clip_mean_std_path"] = os.path.join(cache_dir, "ViT-L-14_stats.th")
-    config["image_enc_params"]["ckpt_path"] = os.path.join(cache_dir, "movq_final.ckpt")
-    cache_model_name = os.path.join(cache_dir, model_name)
-    cache_prior_name = os.path.join(cache_dir, prior_name)
+    config["prior"]["clip_mean_std_path"] = join(cache_dir, "ViT-L-14_stats.th")
+    config["image_enc_params"]["ckpt_path"] = join(cache_dir, "movq_final.ckpt")
+    cache_model_name = join(cache_dir, model_name)
+    cache_prior_name = join(cache_dir, prior_name)
     model = Kandinsky2_1(config, cache_model_name, cache_prior_name, device, task_type = task_type)
     return model
 
-def get_kandinsky2(device, task_type = "text2img", use_auth_token = None, model_version = "2.2", use_flash_attention = False, torch_dtype = torch.float16):
-    if model_version == "2.0":
-        model = get_kandinsky2_0(device, task_type = task_type, use_auth_token = use_auth_token, use_flash_attention = use_flash_attention)
-    elif model_version == "2.1":
-        model = get_kandinsky2_1(device, task_type = task_type, use_auth_token = use_auth_token, use_flash_attention = use_flash_attention)
-    elif model_version == "2.2":
-        cache_dir = os.path.join(ckpt_dir, "2_2")
-        model = Kandinsky2_2(device = device, task_type = task_type, cache_dir = cache_dir, torch_dtype = torch_dtype)
+def get_kandinsky2_2(device, task_type = "text2img", torch_dtype = torch.float16):
+    cache_dir = join(ckpt_dir, "2_2")
+    org_id = "kandinsky-community"
+    download_repos = ["kandinsky-2-2-prior"]
+    if task_type == "text2img":
+        download_repos.append("kandinsky-2-2-decoder")
+    elif task_type == "text2imgCN":
+        download_repos.append("kandinsky-2-2-decoder")
+        download_repos.append("kandinsky-2-2-controlnet-depth")
+    elif task_type == "inpainting":
+        download_repos.append("kandinsky-2-2-decoder-inpaint")
+    elif task_type == "img2img":
+        download_repos.append("kandinsky-2-2-decoder")
+    elif task_type in ("img2imgCN", "depth2img"):
+        download_repos.append("kandinsky-2-2-controlnet-depth")
     else:
-        raise ValueError("Доступны только 2.0, 2.1 и 2.2")
+        raise ValueError("Only text2img, img2img, inpainting, img2imgCN and depth2img is available")
+    for repo in download_repos:
+        repo = "/" + repo
+        snapshot_download(repo_id = org_id + repo, cache_dir = cache_dir + repo, local_dir = cache_dir + repo, local_dir_use_symlinks = False, tqdm_class = tqdm)
+    model = Kandinsky2_2(device = device, task_type = task_type, cache_dir = cache_dir, torch_dtype = torch_dtype, from_local = True)
+    return model
+
+def get_kandinsky3_0(torch_dtype = torch.float16):
+    cache_dir = join(ckpt_dir, "3_0")
+    repo_id = "kandinsky-community/kandinsky-3"
+    snapshot_download(repo_id = repo_id, cache_dir = cache_dir, local_dir = cache_dir, local_dir_use_symlinks = False, tqdm_class = tqdm)
+    model = Kandinsky3Pipeline.from_pretrained(cache_dir, variant = "fp16", torch_dtype = torch_dtype, cache_dir = cache_dir, device_map = None, low_cpu_mem_usage = False)
+    return model
+
+def get_kandinsky(device, task_type = "text2img", model_version = "2.2", use_flash_attention = False, torch_dtype = torch.float16):
+    if model_version == "2.0":
+        model = get_kandinsky2_0(device = device, task_type = task_type, use_flash_attention = use_flash_attention, torch_dtype = torch.float16)
+    elif model_version == "2.1":
+        model = get_kandinsky2_1(device = device, task_type = task_type, use_flash_attention = use_flash_attention, torch_dtype = torch.float16)
+    elif model_version == "2.2":
+        model = get_kandinsky2_2(device = device, task_type = task_type, torch_dtype = torch.float16)
+    elif model_version == "3.0":
+        model = get_kandinsky3_0(torch_dtype = torch.float16)
+    else:
+        raise ValueError("Доступны только 2.0, 2.1, 2.2 и 3.0")
     return model
 
 def Kandinsky_text_to_image(prompt, opt):
@@ -105,10 +157,10 @@ def Kandinsky_text_to_image(prompt, opt):
         width = ver_res[opt["version"]]
         height = width
     if opt["version"] == "Kandinsky2.0":
-        model = get_kandinsky2(device, task_type = "text2img", model_version = "2.0", use_flash_attention = opt["use_flash_attention"])
+        model = get_kandinsky(device, task_type = "text2img", model_version = "2.0", use_flash_attention = opt["use_flash_attention"])
         binary_data_list = model.generate_text2img(prompt, batch_size = opt["num_samples"], h = height, w = width, num_steps = opt["steps"], denoised_type = opt["denoised_type"], dynamic_threshold_v = opt["dynamic_threshold_v"], sampler = opt["sampler"], ddim_eta = opt["eta"], guidance_scale = opt["scale"], seed = opt["seed"])
     elif opt["version"] == "Kandinsky2.1":
-        model = get_kandinsky2(device = device, task_type = "text2img", model_version = "2.1", use_flash_attention = opt["use_flash_attention"])
+        model = get_kandinsky(device = device, task_type = "text2img", model_version = "2.1", use_flash_attention = opt["use_flash_attention"])
         binary_data_list = model.generate_text2img(prompt, num_steps = opt["steps"], batch_size = opt["num_samples"], guidance_scale = opt["scale"], h = height, w = width, sampler = opt["sampler"], ddim_eta = opt["eta"], prior_cf_scale = opt["prior_scale"], prior_steps = str(opt["prior_steps"]), negative_prior_prompt = opt["negative_prior_prompt"], negative_decoder_prompt = opt["negative_prompt"], seed = opt["seed"], progress = opt["progress"])
     elif opt["version"] == "Kandinsky2.2":
         if opt["precision"] == True:
@@ -116,17 +168,17 @@ def Kandinsky_text_to_image(prompt, opt):
         else:
             torch_dtype = torch.float16
         if opt["ControlNET"] == True:
-            model = get_kandinsky2(device, task_type = "text2imgCN", model_version = "2.2", torch_dtype = torch_dtype)
+            model = get_kandinsky(device, task_type = "text2imgCN", model_version = "2.2", torch_dtype = torch_dtype)
             binary_data_list = model.generate_text2imgCN(prompt, decoder_steps = opt["steps"], batch_size = opt["num_samples"], prior_steps = opt["prior_steps"], prior_guidance_scale = opt["prior_scale"], decoder_guidance_scale = opt["scale"], h = height, w = width, negative_prior_prompt = opt["negative_prior_prompt"], negative_decoder_prompt = opt["negative_prompt"], seed = opt["seed"])
         else:
-            model = get_kandinsky2(device, task_type = "text2img", model_version = "2.2", torch_dtype = torch_dtype)
+            model = get_kandinsky(device, task_type = "text2img", model_version = "2.2", torch_dtype = torch_dtype)
             binary_data_list = model.generate_text2img(prompt, decoder_steps = opt["steps"], batch_size = opt["num_samples"], prior_steps = opt["prior_steps"], prior_guidance_scale = opt["prior_scale"], decoder_guidance_scale = opt["scale"], h = height, w = width, negative_prior_prompt = opt["negative_prior_prompt"], negative_decoder_prompt = opt["negative_prompt"], seed = opt["seed"])
     elif opt["version"] == "Kandinsky3.0":
         if opt["precision"] == True:
             torch_dtype = torch.float32
         else:
             torch_dtype = torch.float16
-        model = Kandinsky3Pipeline.from_pretrained("weights\\3_0", variant = "fp16", torch_dtype = torch_dtype, cache_dir = "weights\\3_0", device_map = None, low_cpu_mem_usage = False)
+        model = get_kandinsky(device, task_type = "text2img", model_version = "3.0", torch_dtype = torch_dtype)
         model.enable_model_cpu_offload()
         generator = torch.Generator(device = "cpu").manual_seed(opt["seed"])
         binary_data_list = model.generate_text2img(prompt = prompt, num_inference_steps = opt["steps"], guidance_scale = opt["scale"], negative_prompt = opt["negative_prompt"], num_images_per_prompt = opt["num_samples"], height = height, width = width, generator = generator, prompt_embeds = None, negative_prompt_embeds = None, output_type = "bd", return_dict = True, callback = None, callback_steps = 1, latents = None, device = device).images
